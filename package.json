@@ -8,7 +8,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "check": "astro check",
+    "wp:smoke": "node scripts/wp-smoke.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
