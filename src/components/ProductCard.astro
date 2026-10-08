@@ -1,5 +1,5 @@
 ---
-import { Image } from "astro:assets";
+import ProductImage from "@/components/ProductImage.astro";
 import { formatPrice, type Product } from "@/data/products";
 
 interface Props {
@@ -26,18 +26,20 @@ const reference = index === undefined ? undefined : String(index + 1).padStart(2
   data-reveal
   style={revealDelay ? `--reveal-delay:${revealDelay}ms` : undefined}
 >
-  <div class="overflow-hidden bg-surface">
-    <Image
-      src={product.images[0]}
-      alt={`${product.name} — ${product.shortDescription}`}
-      width={1024}
-      height={1280}
-      loading={eager ? "eager" : "lazy"}
-      decoding={eager ? "sync" : "async"}
-      format="webp"
-      class="aspect-[4/5] w-full object-cover transition-transform duration-[1100ms] ease-out group-hover:scale-[1.04]"
-    />
-  </div>
+  {
+    product.images[0] && (
+      <div class="overflow-hidden bg-surface">
+        <ProductImage
+          src={product.images[0].src}
+          alt={`${product.name} — ${product.shortDescription}`}
+          width={1024}
+          height={1280}
+          eager={eager}
+          class="aspect-[4/5] w-full object-cover transition-transform duration-[1100ms] ease-out group-hover:scale-[1.04]"
+        />
+      </div>
+    )
+  }
 
   <div class="product-card-meta mt-4 flex items-baseline justify-between gap-4 pt-3">
     <div class="flex min-w-0 items-baseline gap-3">
@@ -47,7 +49,7 @@ const reference = index === undefined ? undefined : String(index + 1).padStart(2
         <p class="mt-1 truncate text-[0.8125rem] text-muted">{product.shortDescription}</p>
       </div>
     </div>
-    <span class="mono shrink-0 text-[0.8125rem]">{formatPrice(product.price)}</span>
+    <span class="mono shrink-0 text-[0.8125rem]">{formatPrice(product.price, product.currency)}</span>
   </div>
 </a>
 

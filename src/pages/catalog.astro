@@ -5,7 +5,7 @@ import { siteConfig, pageTitle } from "@/config/site";
 import { getProductFilters, getProducts } from "@/data/products";
 
 const products = await getProducts();
-const { categories, materials } = getProductFilters(products);
+const { categories, collections } = getProductFilters(products);
 ---
 
 <BaseLayout
@@ -16,7 +16,7 @@ const { categories, materials } = getProductFilters(products);
     <section class="shell pb-12 pt-12 md:pb-16 md:pt-20">
       <h1 class="type-h1 hero-in max-w-[12ch]">Every piece, made to order</h1>
       <p class="type-lead hero-in mt-8 max-w-[52ch]" style="--reveal-delay:120ms">
-        Six pieces, three materials. Filter to find what fits your room — then we begin by selecting the board.
+        {products.length} pieces, in {collections.length} ranges. Filter to find what fits your room.
       </p>
     </section>
 
@@ -38,14 +38,14 @@ const { categories, materials } = getProductFilters(products);
               </div>
             </div>
 
-            <div data-filter-group="material">
-              <p class="label mb-2.5" id="filter-material">Material</p>
-              <div class="flex flex-wrap items-center gap-2" role="group" aria-labelledby="filter-material">
-                <button class="chip" type="button" data-filter-value="all" aria-pressed="true">All materials</button>
+            <div data-filter-group="range">
+              <p class="label mb-2.5" id="filter-range">Range</p>
+              <div class="flex flex-wrap items-center gap-2" role="group" aria-labelledby="filter-range">
+                <button class="chip" type="button" data-filter-value="all" aria-pressed="true">All ranges</button>
                 {
-                  materials.map((material) => (
-                    <button class="chip" type="button" data-filter-value={material} aria-pressed="false">
-                      {material}
+                  collections.map((collection) => (
+                    <button class="chip" type="button" data-filter-value={collection} aria-pressed="false">
+                      {collection}
                     </button>
                   ))
                 }
@@ -80,7 +80,7 @@ const { categories, materials } = getProductFilters(products);
             <li
               data-catalog-item
               data-category={product.category}
-              data-material={product.material}
+              data-range={product.collection}
               data-price={product.price}
               data-index={index}
             >
@@ -105,7 +105,7 @@ const { categories, materials } = getProductFilters(products);
       const countLabel = document.querySelector("[data-catalog-count-label]");
       const empty = document.querySelector("[data-catalog-empty]");
       const sort = document.querySelector("[data-catalog-sort]");
-      const filters = { category: "all", material: "all" };
+      const filters = { category: "all", range: "all" };
 
       if (!grid || !sort) return;
 
@@ -113,7 +113,7 @@ const { categories, materials } = getProductFilters(products);
         const visible = items.filter(
           (item) =>
             (filters.category === "all" || item.dataset.category === filters.category) &&
-            (filters.material === "all" || item.dataset.material === filters.material),
+            (filters.range === "all" || item.dataset.range === filters.range),
         );
 
         visible.sort((a, b) => {

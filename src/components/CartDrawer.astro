@@ -4,38 +4,28 @@
  *
  * The cart itself only stores `{ slug, quantity }` in localStorage, so this
  * component ships a small catalogue snapshot — name, price, meta, thumbnail —
- * that the panel reads when it repaints. Thumbnails are generated through the
- * Astro image pipeline at build time, so the drawer stays on optimized WebP
- * without needing an <Image> per line.
+ * that the panel reads when it repaints. Thumbnails point at the smallest
+ * WordPress-generated size, so the drawer loads a 300px crop rather than the
+ * full-size original.
  *
  * Opening and closing is delegated from BaseLayout, which owns focus, the
  * scroll lock and the Escape handler. This file owns the markup and repaint.
  */
-import { getImage } from "astro:assets";
 import { siteConfig } from "@/config/site";
-import { getProducts } from "@/data/products";
+import { formatPrice, getProductMeta, getProducts } from "@/data/products";
 
 const products = await getProducts();
 
-const lines = await Promise.all(
-  products.map(async (product) => {
-    const thumb = await getImage({
-      src: product.images[0],
-      width: 176,
-      height: 176,
-      format: "webp",
-    });
-
-    return {
-      slug: product.slug,
-      name: product.name,
-      price: product.price,
-      meta: `${product.material} · ${product.finish}`,
-      href: `/products/${product.slug}`,
-      image: thumb.src,
-    };
-  }),
-);
+const lines = products.map((product) => ({
+  slug: product.slug,
+  name: product.name,
+  price: product.price,
+  currency: product.currency,
+  meta: getProductMeta(product),
+  href: `/products/${product.slug}`,
+  // `thumbnail` is WordPress's ~300px crop, right for a 72px slot on 2x.
+  image: product.images[0]?.src ?? "",
+}));
 
 const drawerData = { ...siteConfig.commerce, products: lines };
 ---
@@ -82,7 +72,7 @@ const drawerData = { ...siteConfig.commerce, products: lines };
     <div class="cart-panel-foot" data-cart-drawer-foot hidden>
       <div class="flex items-baseline justify-between gap-4">
         <span class="label">Subtotal</span>
-        <span class="mono text-lg" data-cart-drawer-subtotal>$0</span>
+        <span class="mono text-lg" data-cart-drawer-subtotal>{formatPrice(0, siteConfig.commerce.currency)}</span>
       </div>
       <p class="mono mt-2 text-[0.625rem] uppercase tracking-[0.05em] text-muted">
         Delivery calculated at checkout
@@ -133,7 +123,7 @@ const drawerData = { ...siteConfig.commerce, products: lines };
         const line = document.createElement("li");
         line.className = "cart-line";
         line.innerHTML = `
-          <a class="block" tabindex="-1" aria-hidden="true"><img alt="" width="72" height="72" loading="lazy" /></a>
+          <a class="block" tabindex="-1" aria-hidden="true"><img alt="" width="72" height="72" loading="lazy" decoding="async" /></a>
           <div class="flex min-w-0 flex-col gap-3">
             <div class="flex justify-between gap-3">
               <div class="min-w-0">

@@ -1,9 +1,14 @@
 ---
-import { Image } from "astro:assets";
 import ProductCard from "@/components/ProductCard.astro";
+import ProductImage from "@/components/ProductImage.astro";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { siteConfig, pageTitle } from "@/config/site";
-import { formatPrice, getProducts, getRelated, type Product } from "@/data/products";
+import { formatPrice, getProductSpecs, getProducts, getRelated, type Product } from "@/data/products";
+
+// Product detail pages are prerendered even though the site runs on a Node
+// service, so `getStaticPaths()` keeps enumerating every WordPress product at
+// build time. That is what feeds both the page data below and the sitemap.
+export const prerender = true;
 
 export async function getStaticPaths() {
   const products = await getProducts();
@@ -21,29 +26,32 @@ interface Props {
 const { product, related } = Astro.props;
 
 const origin = Astro.site ?? new URL(Astro.url.origin);
-const productUrl = new URL(`/products/${product.slug}`, origin).href;
+// The canonical product lives in WordPress; this page is the headless
+// storefront view of the same thing, so JSON-LD points at the original.
+const productUrl = product.permalink || new URL(`/products/${product.slug}`, origin).href;
 
-const specs = [
-  ["Material", product.material],
-  ["Dimensions", product.dimensions],
-  ["Finish", product.finish],
-  ["Lead time", product.leadTime],
-];
+const specs = getProductSpecs(product);
+const gallery = product.images.slice(0, 6);
+
+const availability = product.inStock
+  ? "https://schema.org/InStock"
+  : "https://schema.org/OutOfStock";
 
 const productSchema = {
   "@context": "https://schema.org",
   "@type": "Product",
   name: product.name,
   description: product.description,
-  image: product.images.map((image) => new URL(image.src, origin).href),
+  image: product.images.map((image) => image.src),
+  sku: product.sku || undefined,
   brand: { "@type": "Brand", name: siteConfig.name },
-  material: product.material,
+  category: product.category,
   url: productUrl,
   offers: {
     "@type": "Offer",
-    priceCurrency: siteConfig.commerce.currency,
+    priceCurrency: product.currency,
     price: product.price,
-    availability: "https://schema.org/PreOrder",
+    availability,
     url: productUrl,
   },
 };
@@ -61,7 +69,7 @@ const breadcrumbSchema = {
 <BaseLayout
   title={pageTitle(product.name)}
   description={product.description.slice(0, 155)}
-  image={product.images[0]}
+  image={product.images[0]?.src}
 >
   <main id="main-content" class="shell">
     <nav class="mono flex gap-2 py-6 text-[0.6875rem] uppercase tracking-[0.05em] text-muted" aria-label="Breadcrumb">
@@ -72,69 +80,78 @@ const breadcrumbSchema = {
 
     <div class="grid items-start gap-x-12 gap-y-10 border-t border-line pt-8 lg:grid-cols-12">
       {/* ------------------------------------------------------------ Gallery */}
-      <section class="lg:col-span-7" aria-label={`${product.name} images`} data-product-gallery>
-        <div class="relative overflow-hidden bg-surface">
-          {
-            product.images.map((image, index) => (
-              <div class:list={["gallery-panel", index !== 0 && "is-hidden"]} data-gallery-panel={index}>
-                <Image
-                  src={image}
-                  alt={`${product.name} — view ${index + 1} of ${product.images.length}`}
-                  width={1440}
-                  height={1800}
-                  format="webp"
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding={index === 0 ? "sync" : "async"}
-                  class="aspect-[4/5] w-full object-cover"
-                />
-              </div>
-            ))
-          }
-        </div>
+      {
+        gallery.length > 0 && (
+          <section class="lg:col-span-7" aria-label={`${product.name} images`} data-product-gallery>
+            <div class="relative overflow-hidden bg-surface">
+              {gallery.map((image, index) => (
+                <div class:list={["gallery-panel", index !== 0 && "is-hidden"]} data-gallery-panel={index}>
+                  <ProductImage
+                    src={image.src}
+                    alt={image.alt}
+                    width={1440}
+                    height={1800}
+                    eager={index === 0}
+                    class="aspect-[4/5] w-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
 
-        <div class="mt-3 grid grid-cols-3 gap-3" role="group" aria-label="Choose an image">
-          {
-            product.images.map((image, index) => (
-              <button
-                type="button"
-                class="gallery-thumb overflow-hidden bg-surface"
-                data-gallery-thumb={index}
-                aria-label={`Show view ${index + 1}`}
-                aria-pressed={index === 0 ? "true" : "false"}
-              >
-                <Image
-                  src={image}
-                  alt=""
-                  width={360}
-                  height={360}
-                  format="webp"
-                  loading="lazy"
-                  class="aspect-square w-full object-cover"
-                />
-              </button>
-            ))
-          }
-        </div>
-      </section>
+            {gallery.length > 1 && (
+              <div class="mt-3 grid grid-cols-3 gap-3" role="group" aria-label="Choose an image">
+                {gallery.map((image, index) => (
+                  <button
+                    type="button"
+                    class="gallery-thumb overflow-hidden bg-surface"
+                    data-gallery-thumb={index}
+                    aria-label={`Show view ${index + 1}`}
+                    aria-pressed={index === 0 ? "true" : "false"}
+                  >
+                    <ProductImage
+                      src={image.src}
+                      alt=""
+                      width={360}
+                      height={360}
+                      class="aspect-square w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      }
 
       {/* --------------------------------------------------------- Buy column */}
       <div class="lg:sticky lg:top-28 lg:col-span-5">
         <p class="label">{product.collection}</p>
         <h1 class="type-h2 mt-5">{product.name}</h1>
-        <p class="mono mt-5 text-xl">{formatPrice(product.price)}</p>
+        <p class="mono mt-5 text-xl">
+          {formatPrice(product.price, product.currency)}
+          {
+            product.onSale && product.regularPrice > product.price && (
+              <span class="ml-3 text-base text-muted line-through">
+                {formatPrice(product.regularPrice, product.currency)}
+              </span>
+            )
+          }
+        </p>
 
         <p class="type-body mt-8 max-w-[46ch]">{product.description}</p>
 
-        <dl class="mono mt-10 border-t border-line text-[0.8125rem]">
-          {
-            specs.map(([term, value]) => (
-              <div class="flex justify-between gap-6 border-b border-line py-3">
-                <dt class="text-muted">{term}</dt>
-                <dd class="text-right">{value}</dd>
-              </div>
-            ))
-          }
-        </dl>
+        {
+          specs.length > 0 && (
+            <dl class="mono mt-10 border-t border-line text-[0.8125rem]">
+              {specs.map(([term, value]) => (
+                <div class="flex justify-between gap-6 border-b border-line py-3">
+                  <dt class="text-muted">{term}</dt>
+                  <dd class="text-right">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )
+        }
 
         <div class="mt-10 flex flex-wrap items-stretch gap-3">
           <div class="qty" data-quantity>
@@ -147,32 +164,42 @@ const breadcrumbSchema = {
             class="btn btn-primary flex-1"
             data-add-to-cart={product.slug}
             data-add-quantity="1"
+            disabled={!product.purchasable}
           >
-            Add to cart
+            {product.purchasable ? "Add to cart" : "Unavailable"}
           </button>
         </div>
 
         <p class="mono mt-5 text-[0.6875rem] uppercase leading-relaxed tracking-[0.05em] text-muted">
-          Free white-glove delivery in the EU · worldwide on request
+          {
+            product.inStock
+              ? "In stock · ships from South Africa"
+              : "Currently out of stock · check back soon"
+          }
         </p>
       </div>
     </div>
 
     {/* ------------------------------------------------------------- Related */}
-    <section class="mt-32 md:mt-44">
-      <div class="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-t border-line pt-8" data-reveal>
-        <h2 class="type-h2 max-w-[16ch]">Pieces that sit well together</h2>
-        <a href="/catalog" class="link link-mono pb-1.5 text-muted">All six pieces</a>
-      </div>
+    {
+      related.length > 0 && (
+        <section class="mt-32 md:mt-44">
+          <div
+            class="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-t border-line pt-8"
+            data-reveal
+          >
+            <h2 class="type-h2 max-w-[16ch]">Pieces that sit well together</h2>
+            <a href="/catalog" class="link link-mono pb-1.5 text-muted">See everything</a>
+          </div>
 
-      <div class="mt-12 grid gap-x-8 gap-y-14 md:mt-14 md:grid-cols-3">
-        {
-          related.map((item, index) => (
-            <ProductCard product={item} headingLevel="h3" revealDelay={index * 110} />
-          ))
-        }
-      </div>
-    </section>
+          <div class="mt-12 grid gap-x-8 gap-y-14 md:mt-14 md:grid-cols-3">
+            {related.map((item, index) => (
+              <ProductCard product={item} headingLevel="h3" revealDelay={index * 110} />
+            ))}
+          </div>
+        </section>
+      )
+    }
   </main>
 
   <style>
@@ -233,7 +260,7 @@ const breadcrumbSchema = {
       // the line and opens the drawer, so there is no add logic on this page.
       const stepper = document.querySelector("[data-quantity]");
       const addButton = document.querySelector("[data-add-to-cart]");
-      if (!stepper || !addButton) return;
+      if (!stepper || !addButton || addButton.hasAttribute("disabled")) return;
 
       const output = stepper.querySelector("[data-quantity-value]");
       const decrease = stepper.querySelector("[data-quantity-decrease]");

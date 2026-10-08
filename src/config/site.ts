@@ -23,26 +23,50 @@ export interface FooterColumn {
 
 export const siteConfig = {
   /** Studio name. Used in the wordmark, metadata, JSON-LD and the footer. */
-  name: "Atelier Kō",
+  name: "Onlyfurn",
 
   /** One-line positioning statement. Emitted as the Organization slogan. */
   tagline: "Furniture, made by hand",
 
+  /** Homepage hero copy. */
+  hero: {
+    headline: "Furniture built for the way you actually live",
+    subheadline:
+      "Dining and office seating, designed in South Africa and shipped nationwide — solid timber, honest construction, and a price you can read at a glance.",
+  },
+
   /** Default meta description for pages that do not set their own. */
   description:
-    "A small Swedish atelier crafting solid oak, ash and walnut furniture by hand. Made to order in Småland.",
+    "Onlyfurn — dining and office furniture in South Africa. Solid timber seating built to last, with nationwide delivery.",
 
   /** Default <title> for pages that do not set their own. */
-  defaultTitle: "Atelier Kō — Hand-made furniture from the northern woods",
+  defaultTitle: "Onlyfurn — Dining and office furniture in South Africa",
 
   /** Contact address, linked in the footer and on the studio page. */
   email: "email@example.com",
 
   /** Used for Organization JSON-LD. */
   location: {
-    region: "Småland",
-    country: "SE",
+    region: "Gauteng",
+    country: "ZA",
   },
+
+  /**
+   * Product ranges promoted on the homepage. `name` must match a WordPress
+   * product category exactly; ranges with no products are dropped at build.
+   */
+  ranges: [
+    {
+      name: "Office Chairs",
+      blurb:
+        "Ergonomic desk seating built around a supportive frame and a seat that stays comfortable through a long day.",
+    },
+    {
+      name: "Dining Furniture",
+      blurb:
+        "Dining chairs and tables in oak, walnut and painted finishes, sized for everyday family meals and long dinners.",
+    },
+  ],
 
   /** Browser theme colour. Keep in step with `--canvas` in src/styles.css. */
   themeColor: "#f4f4f2",
@@ -56,7 +80,7 @@ export const siteConfig = {
     src: "/og-image.png",
     width: 1200,
     height: 630,
-    alt: "Atelier Kō — hand-carved furniture from the northern woods",
+    alt: "Onlyfurn — dining and office furniture in South Africa",
   },
 
   /** Primary navigation, in order. Also drives the mobile menu. */
@@ -68,7 +92,7 @@ export const siteConfig = {
 
   /** Short paragraph in the first footer column. */
   footerBlurb:
-    "A two-person workshop in Småland, Sweden. Solid oak, ash and walnut — cut, joined and finished by hand.",
+    "Dining and office seating in solid timber, designed in South Africa and shipped nationwide.",
 
   /** Footer link columns. Add or remove columns freely. */
   footerColumns: [
@@ -94,28 +118,28 @@ export const siteConfig = {
     },
   ] satisfies FooterColumn[],
 
-  /** Commerce defaults. */
+  /** Commerce defaults. Mirrors the WooCommerce store settings. */
   commerce: {
     /** BCP 47 locale used to format every price. */
-    locale: "en-US",
+    locale: "en-ZA",
     /** ISO 4217 currency code. */
-    currency: "USD",
+    currency: "ZAR",
     /** Flat delivery charge added once when the cart is not empty. */
     shippingFlatRate: 120,
   },
 
   /**
-   * Which products the theme promotes. Each value is a filename in
-   * src/content/products without the .md extension. A slug that does not
+   * Which products the theme promotes. Each value is a WordPress product slug,
+   * so it must match the slug in the WordPress admin. A slug that does not
    * resolve fails the build rather than rendering an empty section.
    */
   featured: {
     /** Three cards in the homepage "in the workshop" grid. */
-    homepageGrid: ["arvid-chair", "low-plinth-table", "tora-desk"],
+    homepageGrid: ["vertex-office-chair", "summit-office-chair", "sterling-office-chair"],
     /** The single large piece given its own homepage section. */
-    homepageSolo: "monolith-bench",
+    homepageSolo: "onlyfurn-lola-dining-chair",
     /** The piece shown at the foot of the mobile menu. */
-    mobileMenu: "oken-stool",
+    mobileMenu: "onlyfurn-jade-dining-chair",
   },
 } as const;
 

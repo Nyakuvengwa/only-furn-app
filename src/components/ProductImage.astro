@@ -1,0 +1,38 @@
+---
+/**
+ * Product image renderer.
+ *
+ * Catalogue imagery lives on the WordPress origin, so it cannot be an imported
+ * `ImageMetadata`. This wraps astro:assets' <Image>, which downloads and
+ * re-encodes the remote file at build time so these pages keep the same
+ * WebP output and explicit dimensions as the bundled assets.
+ *
+ * WordPress images often have no alt text, so alt is required here rather than
+ * optional — a blank alt on a meaningful product photo is an accessibility
+ * failure, and the caller already has a better phrase available.
+ */
+import { Image } from "astro:assets";
+
+interface Props {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  /** Eager-load for above-the-fold images only. */
+  eager?: boolean;
+  class?: string;
+}
+
+const { src, alt, width, height, eager = false, class: className } = Astro.props;
+---
+
+<Image
+  src={src}
+  alt={alt}
+  width={width}
+  height={height}
+  format="webp"
+  loading={eager ? "eager" : "lazy"}
+  decoding={eager ? "sync" : "async"}
+  class={className}
+/>

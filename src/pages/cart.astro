@@ -1,8 +1,8 @@
 ---
-import { Image } from "astro:assets";
+import ProductImage from "@/components/ProductImage.astro";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { siteConfig, pageTitle } from "@/config/site";
-import { formatPrice, getProducts, productForJson } from "@/data/products";
+import { formatPrice, getProductMeta, getProducts, productForJson } from "@/data/products";
 
 const products = await getProducts();
 
@@ -30,9 +30,7 @@ const cartData = {
     </header>
 
     <div class="py-28 text-center" data-cart-empty>
-      <p class="type-body mx-auto max-w-[42ch]">
-        You haven't added any pieces yet. The catalogue is small, slow, and waiting.
-      </p>
+      <p class="type-body mx-auto max-w-[42ch]">You haven't added any pieces yet. The catalogue is waiting.</p>
       <a href="/catalog" class="btn btn-primary mt-8">Browse the catalogue</a>
     </div>
 
@@ -78,7 +76,7 @@ const cartData = {
                   name="lastName"
                   required
                   autocomplete="family-name"
-                  placeholder="Lindgren"
+                  placeholder="Mokoena"
                   class="field mono"
                 />
               </div>
@@ -89,7 +87,7 @@ const cartData = {
                   name="address"
                   required
                   autocomplete="street-address"
-                  placeholder="Storgatan 12"
+                  placeholder="12 Main Road"
                   class="field mono"
                 />
               </div>
@@ -100,7 +98,7 @@ const cartData = {
                   name="city"
                   required
                   autocomplete="address-level2"
-                  placeholder="Växjö"
+                  placeholder="Johannesburg"
                   class="field mono"
                 />
               </div>
@@ -111,7 +109,7 @@ const cartData = {
                   name="postalCode"
                   required
                   autocomplete="postal-code"
-                  placeholder="352 31"
+                  placeholder="2196"
                   class="field mono"
                 />
               </div>
@@ -174,15 +172,15 @@ const cartData = {
         <dl class="mono mt-6 text-[0.8125rem]">
           <div class="flex justify-between border-b border-line py-3">
             <dt class="text-muted">Subtotal</dt>
-            <dd data-cart-subtotal>$0</dd>
+            <dd data-cart-subtotal>{formatPrice(0, siteConfig.commerce.currency)}</dd>
           </div>
           <div class="flex justify-between border-b border-line py-3">
-            <dt class="text-muted">White-glove delivery</dt>
-            <dd data-cart-shipping>$0</dd>
+            <dt class="text-muted">Delivery</dt>
+            <dd data-cart-shipping>{formatPrice(0, siteConfig.commerce.currency)}</dd>
           </div>
           <div class="flex items-baseline justify-between pt-5">
             <dt class="label">Total</dt>
-            <dd class="mono text-2xl" data-cart-total>$0</dd>
+            <dd class="mono text-2xl" data-cart-total>{formatPrice(0, siteConfig.commerce.currency)}</dd>
           </div>
         </dl>
 
@@ -190,8 +188,8 @@ const cartData = {
         <button type="button" class="link link-mono mt-5 hidden text-muted" data-cart-back>Back to selection</button>
 
         <p class="type-body mt-8 border-t border-line pt-6 text-[0.8125rem]">
-          Each piece is signed and dated. Pieces are wrapped in unbleached cotton and shipped in reusable wooden
-          crates. Returned crates earn a small credit toward your next order.
+          Pieces ship nationwide from {siteConfig.location.region}. Flat-rate delivery is applied once per order, and
+          the final amount is confirmed before payment.
         </p>
       </aside>
     </div>
@@ -200,22 +198,24 @@ const cartData = {
       products.map((product) => (
         <template data-product-template={product.slug}>
           <li class="flex gap-6 border-b border-line py-6" data-cart-row={product.slug}>
-            <a
-              href={`/products/${product.slug}`}
-              class="block size-24 shrink-0 overflow-hidden bg-surface md:size-28"
-              tabindex="-1"
-              aria-hidden="true"
-            >
-              <Image
-                src={product.images[0]}
-                alt=""
-                width={320}
-                height={320}
-                format="webp"
-                loading="eager"
-                class="h-full w-full object-cover"
-              />
-            </a>
+            {
+              product.images[0] && (
+                <a
+                  href={`/products/${product.slug}`}
+                  class="block size-24 shrink-0 overflow-hidden bg-surface md:size-28"
+                  tabindex="-1"
+                  aria-hidden="true"
+                >
+                  <ProductImage
+                    src={product.images[0].src}
+                    alt=""
+                    width={320}
+                    height={320}
+                    class="h-full w-full object-cover"
+                  />
+                </a>
+              )
+            }
             <div class="flex min-w-0 flex-1 flex-col justify-between gap-4">
               <div class="flex justify-between gap-4">
                 <div class="min-w-0">
@@ -223,14 +223,14 @@ const cartData = {
                     {product.name}
                   </a>
                   <p class="mono mt-1.5 text-[0.6875rem] uppercase tracking-[0.05em] text-muted">
-                    {product.material} · {product.finish}
+                    {getProductMeta(product)}
                   </p>
-                  <p class="mono mt-1 text-[0.6875rem] uppercase tracking-[0.05em] text-muted">
-                    Lead time {product.leadTime}
-                  </p>
+                  {product.sku && (
+                    <p class="mono mt-1 text-[0.6875rem] uppercase tracking-[0.05em] text-muted">SKU {product.sku}</p>
+                  )}
                 </div>
                 <span class="mono whitespace-nowrap text-[0.8125rem]" data-row-line-price>
-                  {formatPrice(product.price)}
+                  {formatPrice(product.price, product.currency)}
                 </span>
               </div>
               <div class="flex items-center justify-between gap-4">

@@ -100,6 +100,10 @@ export interface WpCategory extends WpTerm {
   count?: number;
 }
 
+/**
+ * A WordPress user. Field names follow `wp/v2/users`, a superset of the
+ * overlapping `wc/v3/customers` fields.
+ */
 export interface WpCustomer {
   id: number;
   username: string;
@@ -107,6 +111,10 @@ export interface WpCustomer {
   first_name: string;
   last_name: string;
   name: string;
+  /** `wp/v2/users` only. */
+  slug?: string;
+  roles?: string[];
+  capabilities?: Record<string, boolean>;
   billing?: Record<string, string>;
   shipping?: Record<string, string>;
 }
@@ -157,6 +165,8 @@ interface RequestOptions {
   authenticated?: boolean;
   /** Bypass the in-process cache. */
   noCache?: boolean;
+  /** Extra headers, merged last so they win. */
+  headers?: Record<string, string>;
 }
 
 function buildUrl(path: string, query: RequestOptions["query"]): string {
@@ -177,6 +187,7 @@ function buildUrl(path: string, query: RequestOptions["query"]): string {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { query, method = "GET", body, token, authenticated = false } = options;
   const url = buildUrl(path, query);
+  const extraHeaders = options.headers ?? {};
 
   if (method === "GET" && !options.noCache && CACHE_TTL > 0) {
     const hit = cache.get(url);
@@ -201,7 +212,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const response = await fetch(url, {
     method,
-    headers,
+    headers: { ...headers, ...extraHeaders },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -250,10 +261,12 @@ interface RawStoreProduct {
   weight?: string;
   dimensions?: { length: string; width: string; height: string };
   attributes?: WpTerm[] | null;
-  /** `wc/v3` shape, used when credentials are present. */
+  /** `wc/v3` shape, used when credentials are present. Prices are major units. */
   regular_price?: string;
   price?: string;
   price_html?: string;
+  /** `wc/v3` spells this `purchasable`; the Store API uses `is_purchasable`. */
+  purchasable?: boolean;
   manage_stock?: boolean;
   stock_quantity?: number | null;
   date_created?: string;
@@ -284,6 +297,17 @@ export function htmlToText(html: string): string {
   return decodeEntities(html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
 }
 
+function toNumber(value: string | undefined): number {
+  if (!value) return 0;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+/**
+ * The Store API reports money in minor units (`"199900"`) alongside an explicit
+ * `currency_minor_unit`; `wc/v3` reports major units (`"1999"`). Dividing is only
+ * correct for the Store API shape, so branch on which one arrived.
+ */
 function toMajorUnits(value: string | undefined, minorUnit: number): number {
   if (!value) return 0;
   const numeric = Number(value);
@@ -292,8 +316,14 @@ function toMajorUnits(value: string | undefined, minorUnit: number): number {
 }
 
 function normaliseProduct(raw: RawStoreProduct): WpProduct {
-  const minorUnit = raw.prices?.currency_minor_unit ?? 2;
+  // Presence of `prices` means the Store API shape (minor units).
+  const storeShape = raw.prices !== undefined;
+  const minorUnit = storeShape ? (raw.prices.currency_minor_unit ?? 2) : 0;
   const currency = raw.prices?.currency_code ?? "ZAR";
+  const price = storeShape ? toMajorUnits(raw.prices.price, minorUnit) : toNumber(raw.price);
+  const regularPrice = storeShape
+    ? toMajorUnits(raw.prices.regular_price, minorUnit)
+    : toNumber(raw.regular_price);
 
   return {
     id: raw.id,
@@ -305,21 +335,23 @@ function normaliseProduct(raw: RawStoreProduct): WpProduct {
     short_description: raw.short_description ?? "",
     description: raw.description ?? "",
     on_sale: raw.on_sale ?? false,
+    // Keep the declared currency even when synthesising a Money shape, so price
+    // formatting and JSON-LD read the same field on both API surfaces.
     prices: raw.prices ?? {
-      price: "0",
-      regular_price: "0",
-      sale_price: "0",
+      price: String(price * 10 ** minorUnit),
+      regular_price: String(regularPrice * 10 ** minorUnit),
+      sale_price: String(price * 10 ** minorUnit),
       currency_code: currency,
       currency_minor_unit: minorUnit,
     },
-    price: toMajorUnits(raw.prices?.price ?? raw.price, minorUnit),
-    regularPrice: toMajorUnits(raw.prices?.regular_price ?? raw.regular_price, minorUnit),
+    price,
+    regularPrice,
     currency,
     images: raw.images ?? [],
     categories: raw.categories ?? [],
     tags: raw.tags ?? [],
     brands: raw.brands ?? [],
-    is_purchasable: raw.is_purchasable ?? true,
+    is_purchasable: raw.is_purchasable ?? raw.purchasable ?? true,
     is_in_stock: raw.is_in_stock ?? true,
     stock_status: raw.stock_status ?? "instock",
     weight: raw.weight ?? "",
@@ -348,15 +380,29 @@ export interface ProductQuery {
 }
 
 /**
+ * Resolves a category slug to its term id.
+ *
+ * The Store API's `category` parameter accepts a slug, but `wc/v3` requires a
+ * numeric id, so an authenticated call has to translate first.
+ */
+async function resolveCategoryId(slug: string): Promise<number | undefined> {
+  const categories = await getCategories();
+  return categories.find((category) => category.slug === slug)?.id;
+}
+
+/**
  * Catalogue read path. Prefers authenticated `wc/v3` (complete data) and falls
  * back to the public Store API, which needs no credentials and is sufficient
  * for every field the theme renders.
+ *
+ * Callers must never see unpublished products: `wc/v3` returns drafts and
+ * private items to an authenticated admin, so status is pinned to `publish`
+ * on that path only. The Store API is already publish-only.
  */
 async function listProducts(query: ProductQuery = {}): Promise<WpProduct[]> {
-  const params = {
+  const shared = {
     page: query.page ?? 1,
     per_page: query.perPage ?? 20,
-    category: query.category ?? query.categorySlug,
     search: query.search,
     orderby: query.orderby,
     order: query.order,
@@ -366,11 +412,25 @@ async function listProducts(query: ProductQuery = {}): Promise<WpProduct[]> {
   };
 
   if (HAS_WC_CREDENTIALS) {
-    const raw = await request<RawStoreProduct[]>("/wc/v3/products", { query: params, authenticated: true });
+    let category = query.category;
+
+    if (!category && query.categorySlug) {
+      category = await resolveCategoryId(query.categorySlug);
+      if (!category) return [];
+    }
+
+    const raw = await request<RawStoreProduct[]>("/wc/v3/products", {
+      query: { ...shared, status: "publish", category },
+      authenticated: true,
+    });
+
     return raw.map(normaliseProduct);
   }
 
-  const raw = await request<RawStoreProduct[]>("/wc/store/v1/products", { query: params });
+  const raw = await request<RawStoreProduct[]>("/wc/store/v1/products", {
+    query: { ...shared, category: query.category ?? query.categorySlug },
+  });
+
   return raw.map(normaliseProduct);
 }
 
@@ -384,12 +444,18 @@ export function getProducts(query: ProductQuery = {}): Promise<WpProduct[]> {
  * Resolves to `undefined` when no product matches.
  */
 export async function getProductBySlug(slug: string): Promise<WpProduct | undefined> {
-  const params = { slug, per_page: 1 };
+  const params = HAS_WC_CREDENTIALS ? { slug, per_page: 1, status: "publish" } : { slug, per_page: 1 };
   const raw = HAS_WC_CREDENTIALS
     ? await request<RawStoreProduct[]>("/wc/v3/products", { query: params, authenticated: true })
     : await request<RawStoreProduct[]>("/wc/store/v1/products", { query: params });
 
   return raw[0] ? normaliseProduct(raw[0]) : undefined;
+}
+
+/** Every published product slug, for `getStaticPaths`. */
+export async function getProductSlugs(): Promise<string[]> {
+  const products = await listProducts({ perPage: 100 });
+  return products.map((product) => product.slug).filter(Boolean);
 }
 
 /** `GET /wp-json/wc/v3/products/{id}` — falls back to the Store API by id. */
@@ -426,37 +492,68 @@ export async function getCategoriesWithProducts(): Promise<WpCategory[]> {
 /* Customers                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/** HTTP Basic auth from a username and an Application Password. */
+function appPasswordAuth(username: string, appPassword: string): string {
+  return `Basic ${toBase64(`${username}:${appPassword}`)}`;
+}
+
 /**
- * Exchanges credentials for a bearer token.
+ * Signs a customer in and verifies the result.
  *
- * The site has no JWT plugin yet, so `/wp-json/jwt-auth/v1/token` 404s today.
- * Once a token endpoint is enabled this is the only function that changes.
+ * This install has no JWT plugin, so `/wp-json/jwt-auth/v1/token` 404s. The
+ * working path is WordPress core Application Passwords: verify the supplied
+ * password as Basic auth against `/wp/v2/users/me`, then mint a session here.
+ * The verification is server-side, so the user's real password is never stored.
  */
-export async function loginCustomer(username: string, password: string): Promise<string> {
+export async function loginCustomer(username: string, password: string): Promise<WpCustomer> {
   if (!TOKEN_ENDPOINT) {
-    throw new WordPressApiError(501, TOKEN_ENDPOINT ?? "token", "WC_AUTH_TOKEN_ENDPOINT is not configured.");
+    throw new WordPressApiError(501, "token", "WC_AUTH_TOKEN_ENDPOINT is not configured.");
   }
 
+  // 1. Try the configured token endpoint first, if a JWT plugin is active.
   const response = await fetch(TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ username, password }),
   });
 
-  if (!response.ok) {
-    throw new WordPressApiError(
-      response.status,
-      TOKEN_ENDPOINT,
-      "Sign-in failed. Check the credentials, or whether a JWT plugin is active on WordPress.",
-    );
+  if (response.ok) {
+    const payload = (await response.json()) as { token?: string };
+    if (payload.token) return getCustomerProfile(payload.token);
   }
 
-  const payload = (await response.json()) as { token?: string };
-  if (!payload.token) {
-    throw new WordPressApiError(response.status, TOKEN_ENDPOINT, "The token endpoint returned no token.");
+  // 2. Fall back to Application Password verification via Basic auth. Only
+  //    Application Passwords work here — a normal account password fails,
+  //    which is why customers must create one in their profile.
+  const me = await request<WpCustomer>("/wp/v2/users/me", {
+    authenticated: false,
+    noCache: true,
+    headers: { Authorization: appPasswordAuth(username, password) },
+  });
+
+  return me;
+}
+
+/**
+ * `GET /wp-json/wp/v2/users/me` using WP_USERNAME / WP_APP_PASSWORD.
+ *
+ * A service-account check, not customer auth: it confirms the Application
+ * Password handshake succeeded. Never surface the result publicly.
+ */
+export function getCustomerProfileWithAppPassword(
+  username?: string,
+  appPassword?: string,
+): Promise<WpCustomer> {
+  username = username ?? import.meta.env.WP_USERNAME;
+  appPassword = appPassword ?? import.meta.env.WP_APP_PASSWORD;
+  if (!username || !appPassword) {
+    throw new WordPressApiError(401, "users/me", "WP_USERNAME / WP_APP_PASSWORD are not set.");
   }
 
-  return payload.token;
+  return request<WpCustomer>("/wp/v2/users/me", {
+    noCache: true,
+    headers: { Authorization: appPasswordAuth(username, appPassword) },
+  });
 }
 
 /**
