@@ -18,7 +18,10 @@ if (!import.meta.env.SSR) {
 /* Configuration                                                              */
 /* -------------------------------------------------------------------------- */
 
-const rawUrl = import.meta.env.WORDPRESS_URL ?? "https://onlyfurn.co.za";
+// `||`, not `??`: a variable that is set but empty (common in CI, where an unset
+// ARG becomes an empty string) is not nullish, so `??` would let "" through and
+// buildUrl() would throw "Invalid URL" with no hint about the real cause.
+const rawUrl = import.meta.env.WORDPRESS_URL || "https://onlyfurn.co.za";
 
 /** WordPress origin, always without a trailing slash. */
 export const WORDPRESS_URL = rawUrl.replace(/\/+$/, "");
@@ -26,7 +29,7 @@ export const WORDPRESS_URL = rawUrl.replace(/\/+$/, "");
 const CONSUMER_KEY = import.meta.env.WC_CONSUMER_KEY as string | undefined;
 const CONSUMER_SECRET = import.meta.env.WC_CONSUMER_SECRET as string | undefined;
 const TOKEN_ENDPOINT = (import.meta.env.WC_AUTH_TOKEN_ENDPOINT as string | undefined)?.trim();
-const CACHE_TTL = Number(import.meta.env.WORDPRESS_CACHE_TTL ?? 300) || 0;
+const CACHE_TTL = Number(import.meta.env.WORDPRESS_CACHE_TTL || 300) || 0;
 
 /** True when `wc/v3` calls can be authenticated. Drives the endpoint fallback. */
 export const HAS_WC_CREDENTIALS = Boolean(CONSUMER_KEY && CONSUMER_SECRET);
