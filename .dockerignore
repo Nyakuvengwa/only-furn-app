@@ -1,0 +1,26 @@
+# Keep real credentials out of the build context. `astro build` reads these
+# from the environment, never from a committed file, so nothing here is needed
+# to build the image.
+.env
+.env.*
+!.env.example
+
+# Populated inside the image by npm ci / astro build.
+node_modules
+dist
+dist-ssr
+.astro
+
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# Not needed to build or run the site.
+README.md
+preview.webp
+*.log
+npm-debug.log*
+Dockerfile
+.dockerignore
