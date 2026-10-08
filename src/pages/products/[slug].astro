@@ -87,6 +87,8 @@ const breadcrumbSchema = {
                     alt={image.alt}
                     width={1440}
                     height={1800}
+                    widths={[480, 768, 1024, 1280, 1440]}
+                    sizes="(min-width: 1024px) 58vw, 100vw"
                     eager={index === 0}
                     class="aspect-[4/5] w-full object-cover"
                   />

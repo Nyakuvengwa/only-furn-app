@@ -13,17 +13,34 @@
  */
 import { Image } from "astro:assets";
 
-interface Props {
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-  /** Eager-load for above-the-fold images only. */
-  eager?: boolean;
-  class?: string;
-}
+  interface Props {
+    src: string;
+    alt: string;
+    width: number;
+    height: number;
+    /**
+     * Candidate widths for the generated srcset, in CSS pixels. Supply these so
+     * a phone downloads a phone-sized file instead of the largest one. Astro
+     * re-encodes each candidate to WebP through the /_image endpoint.
+     */
+    widths?: number[];
+    /** How wide the image is displayed, so the browser can pick a candidate. */
+    sizes?: string;
+    /** Eager-load for above-the-fold images only. */
+    eager?: boolean;
+    class?: string;
+  }
 
-const { src, alt, width, height, eager = false, class: className } = Astro.props;
+  const {
+    src,
+    alt,
+    width,
+    height,
+    widths,
+    sizes,
+    eager = false,
+    class: className,
+  } = Astro.props;
 ---
 
 <Image
@@ -31,6 +48,8 @@ const { src, alt, width, height, eager = false, class: className } = Astro.props
   alt={alt}
   width={width}
   height={height}
+  widths={widths}
+  sizes={sizes}
   format="webp"
   loading={eager ? "eager" : "lazy"}
   decoding={eager ? "sync" : "async"}

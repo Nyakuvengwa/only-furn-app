@@ -147,6 +147,8 @@ const cartIndex = String(navItems.length + 1).padStart(2, "0");
               alt={`${featuredProduct.name} — ${featuredProduct.shortDescription}`}
               width={900}
               height={560}
+              widths={[320, 480, 640, 900]}
+              sizes="(min-width: 768px) 50vw, 100vw"
               class="aspect-[16/10] max-h-[28dvh] w-full object-cover transition-transform duration-[900ms] ease-out group-hover:scale-[1.04]"
             />
           </div>

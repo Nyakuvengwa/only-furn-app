@@ -21,6 +21,11 @@ import { siteConfig } from "@/config/site";
 export interface ProductImage {
   /** Absolute URL on the WordPress origin. */
   src: string;
+  /**
+   * WordPress's ~150-300px crop. Used for small slots such as the cart drawer
+   * thumbnail, where the full-size original would be wildly oversized.
+   */
+  thumbnail?: string;
   /** Alt text, falling back to a descriptive phrase when WordPress has none. */
   alt: string;
   /** WordPress-generated `srcset`, when the source provides one. */
@@ -83,6 +88,7 @@ function sanitiseHtml(html: string): string {
 function toProductImage(image: WpImage, productName: string, index: number): ProductImage {
   return {
     src: image.src,
+    thumbnail: image.thumbnail || undefined,
     // WordPress alt text is frequently empty; fall back to something useful
     // rather than shipping an unlabeled image.
     alt: image.alt?.trim() || `${productName} — view ${index + 1}`,

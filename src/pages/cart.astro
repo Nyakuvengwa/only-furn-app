@@ -207,10 +207,12 @@ const cartData = {
                   aria-hidden="true"
                 >
                   <ProductImage
-                    src={product.images[0].src}
+                    src={product.images[0].thumbnail ?? product.images[0].src}
                     alt=""
                     width={320}
                     height={320}
+                    widths={[160, 240, 320]}
+                    sizes="112px"
                     class="h-full w-full object-cover"
                   />
                 </a>

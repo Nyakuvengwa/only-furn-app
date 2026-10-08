@@ -23,8 +23,9 @@ const lines = products.map((product) => ({
   currency: product.currency,
   meta: getProductMeta(product),
   href: `/products/${product.slug}`,
-  // `thumbnail` is WordPress's ~300px crop, right for a 72px slot on 2x.
-  image: product.images[0]?.src ?? "",
+  // The cart line renders a 72px slot, so use WordPress's small crop rather
+  // than the full-size original, which would be a large download for a thumbnail.
+  image: product.images[0]?.thumbnail ?? product.images[0]?.src ?? "",
 }));
 
 const drawerData = { ...siteConfig.commerce, products: lines };
