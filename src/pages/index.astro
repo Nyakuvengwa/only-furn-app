@@ -70,6 +70,8 @@ const organizationSchema = {
                   alt={solo.images[0].alt}
                   width={1600}
                   height={1400}
+                  widths={[480, 768, 1080, 1400, 1600]}
+                  sizes="(min-width: 768px) 58vw, 100vw"
                   eager
                   class="parallax aspect-[4/3] w-full object-cover object-right md:aspect-[8/7]"
                 />
@@ -137,6 +139,8 @@ const organizationSchema = {
                     alt=""
                     width={1600}
                     height={1100}
+                    widths={[480, 768, 1080, 1400, 1600]}
+                    sizes="(min-width: 1024px) 66vw, (min-width: 768px) 58vw, 100vw"
                     class="aspect-[5/4] w-full object-cover transition-transform duration-[1100ms] ease-out group-hover:scale-[1.04] md:aspect-[16/11]"
                   />
                 </div>
