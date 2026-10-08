@@ -1,6 +1,5 @@
 import { defineConfig } from "astro/config";
 import node from "@astrojs/node";
-import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
@@ -9,13 +8,13 @@ export default defineConfig({
   // the standalone server. `server.host` is what the adapter feeds to
   // `http.listen()`; without it the server binds localhost only and the
   // Dokploy/Traefik proxy cannot reach it. PORT comes from the platform env.
+  //
+  // No @astrojs/sitemap integration: every route renders on demand, so Astro
+  // knows no product paths at build time. src/pages/sitemap.xml.ts generates
+  // the sitemap from the live WordPress catalogue instead.
   output: "server",
   adapter: node({ mode: "standalone" }),
   server: { host: true },
-  integrations: [sitemap()],
-  // Product imagery is served from the WordPress origin. Astro fetches these at
-  // build time and re-encodes them to WebP through the same pipeline the
-  // bundled local assets use, so <Image> behaves identically for both.
   image: {
     remotePatterns: [{ protocol: "https", hostname: "onlyfurn.co.za" }],
   },

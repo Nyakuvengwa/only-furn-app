@@ -18,18 +18,31 @@ if (!import.meta.env.SSR) {
 /* Configuration                                                              */
 /* -------------------------------------------------------------------------- */
 
-// `||`, not `??`: a variable that is set but empty (common in CI, where an unset
-// ARG becomes an empty string) is not nullish, so `??` would let "" through and
-// buildUrl() would throw "Invalid URL" with no hint about the real cause.
-const rawUrl = import.meta.env.WORDPRESS_URL || "https://onlyfurn.co.za";
+/**
+ * Resolve a configuration variable, preferring the runtime environment.
+ *
+ * Astro statically replaces `import.meta.env.X` when the build runs, so a
+ * variable that is absent at build time is compiled in as `undefined` and the
+ * server never looks at it again. Reading `process.env` first is what makes
+ * these runtime values, so the catalogue is fetched live from WordPress and new
+ * products appear without rebuilding the image. An empty string is treated as
+ * unset, because that is what an unset CI variable becomes.
+ */
+function readEnv(key: string): string | undefined {
+  const runtime = typeof process !== "undefined" ? process.env[key] : undefined;
+  if (runtime) return runtime;
+  return import.meta.env[key] || undefined;
+}
+
+const rawUrl = readEnv("WORDPRESS_URL") || "https://onlyfurn.co.za";
 
 /** WordPress origin, always without a trailing slash. */
 export const WORDPRESS_URL = rawUrl.replace(/\/+$/, "");
 
-const CONSUMER_KEY = import.meta.env.WC_CONSUMER_KEY as string | undefined;
-const CONSUMER_SECRET = import.meta.env.WC_CONSUMER_SECRET as string | undefined;
-const TOKEN_ENDPOINT = (import.meta.env.WC_AUTH_TOKEN_ENDPOINT as string | undefined)?.trim();
-const CACHE_TTL = Number(import.meta.env.WORDPRESS_CACHE_TTL || 300) || 0;
+const CONSUMER_KEY = readEnv("WC_CONSUMER_KEY");
+const CONSUMER_SECRET = readEnv("WC_CONSUMER_SECRET");
+const TOKEN_ENDPOINT = readEnv("WC_AUTH_TOKEN_ENDPOINT")?.trim();
+const CACHE_TTL = Number(readEnv("WORDPRESS_CACHE_TTL") || 300) || 0;
 
 /** True when `wc/v3` calls can be authenticated. Drives the endpoint fallback. */
 export const HAS_WC_CREDENTIALS = Boolean(CONSUMER_KEY && CONSUMER_SECRET);
@@ -547,8 +560,8 @@ export function getCustomerProfileWithAppPassword(
   username?: string,
   appPassword?: string,
 ): Promise<WpCustomer> {
-  username = username ?? import.meta.env.WP_USERNAME;
-  appPassword = appPassword ?? import.meta.env.WP_APP_PASSWORD;
+  username = username ?? readEnv("WP_USERNAME");
+  appPassword = appPassword ?? readEnv("WP_APP_PASSWORD");
   if (!username || !appPassword) {
     throw new WordPressApiError(401, "users/me", "WP_USERNAME / WP_APP_PASSWORD are not set.");
   }

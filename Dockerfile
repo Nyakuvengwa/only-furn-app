@@ -3,29 +3,27 @@
 # ---------------------------------------------------------------------------
 # ONLYFURN — Astro storefront on the @astrojs/node standalone server.
 #
-# WordPress credentials are BUILD-TIME secrets. `astro build` prerenders every
-# route, so it queries the WooCommerce catalogue while the image is built. Astro
-# inlines them into dist/server, so the container needs nothing at runtime
-# beyond PORT.
+# Every route renders on demand, so the build never contacts WordPress and
+# needs no credentials. Products added in WordPress are served live, with no
+# rebuild. `astro build` produces only the server bundle and the shell assets.
 #
-# They are passed with BuildKit secret mounts using `env=`, which exposes each
-# secret to that single RUN as an environment variable. Nothing lands in image
-# metadata, `docker history`, or any layer, and no ARG/ENV is needed.
+# This means the image is fully reproducible from the repository: no build args,
+# no secrets, nothing environment-specific baked in. In particular the WooCommerce
+# credentials are NOT compiled into the image. src/lib/wordpress.ts reads
+# process.env at request time, so they are supplied as runtime environment
+# variables and stay out of every layer.
 #
-#   docker build \
-#     --secret id=WC_CONSUMER_KEY \
-#     --secret id=WC_CONSUMER_SECRET \
-#     --secret id=WORDPRESS_URL \
-#     .
+# Runtime environment (set these in Dokploy's Environment tab, or however you
+# prefer — they are never baked into the image):
 #
-# Passing `id=NAME` with no src binds the identically named environment variable
-# from the build client. To read them from a file instead, add `,src=.env`.
-#
-# WC_CONSUMER_KEY / WC_CONSUMER_SECRET are required. Without them
-# HAS_WC_CREDENTIALS in src/lib/wordpress.ts is false and the build silently
-# falls back to the public /wc/store/v1 API, producing a site that looks fine
-# while carrying the wrong catalogue — hence the explicit check below.
-# WORDPRESS_URL is optional and falls back to https://onlyfurn.co.za.
+#   PORT                  optional, defaults to 3000 below; the standalone server
+#                         prefers process.env.PORT when the platform sets it
+#   WORDPRESS_URL         optional, defaults to https://onlyfurn.co.za
+#   WC_CONSUMER_KEY       WooCommerce REST key. With key + secret the catalogue is
+#   WC_CONSUMER_SECRET    read from authenticated /wc/v3; without them it falls
+#                         back to the public /wc/store/v1 API, which needs no
+#                         credentials but cannot serve customers or orders
+#   WORDPRESS_CACHE_TTL   optional, defaults to 300 seconds
 # ---------------------------------------------------------------------------
 
 FROM node:22-slim AS deps
@@ -37,19 +35,20 @@ RUN npm ci
 FROM deps AS build
 WORKDIR /app
 COPY . .
-
-# `required=false` lets WORDPRESS_URL be omitted without failing the build.
-RUN --mount=type=secret,id=WC_CONSUMER_KEY,env=WC_CONSUMER_KEY \
-    --mount=type=secret,id=WC_CONSUMER_SECRET,env=WC_CONSUMER_SECRET \
-    --mount=type=secret,id=WORDPRESS_URL,env=WORDPRESS_URL,required=false \
-    sh -c 'test -n "$WC_CONSUMER_KEY" || { echo "ERROR: WC_CONSUMER_KEY was not supplied to the build" >&2; echo "  docker build --secret id=WC_CONSUMER_KEY ..." >&2; exit 1; }; test -n "$WC_CONSUMER_SECRET" || { echo "ERROR: WC_CONSUMER_SECRET was not supplied to the build" >&2; echo "  docker build --secret id=WC_CONSUMER_SECRET ..." >&2; exit 1; }; npm run build'
+RUN npm run build
 
 # The server bundle externalises several packages and loads Sharp lazily via
 # `await import("sharp")` for runtime image optimisation, so the runtime stage
 # needs the production dependency tree, not just dist/.
 FROM node:22-slim AS runner
 WORKDIR /app
-ENV NODE_ENV=production
+# PORT must be set explicitly. @astrojs/node takes its default from Astro's
+# `server.port` (4321), not from a sensible production value, so without this
+# the container listens on 4321 while the proxy forwards to 3000 and every
+# request is refused. The standalone server prefers process.env.PORT, so a
+# platform that sets its own PORT still wins.
+ENV NODE_ENV=production \
+    PORT=3000
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
@@ -57,5 +56,5 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build --chown=node:node /app/dist ./dist
 
 USER node
-EXPOSE 8080
+EXPOSE 3000
 CMD ["node", "./dist/server/entry.mjs"]

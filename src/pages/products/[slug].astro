@@ -3,27 +3,23 @@ import ProductCard from "@/components/ProductCard.astro";
 import ProductImage from "@/components/ProductImage.astro";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { siteConfig, pageTitle } from "@/config/site";
-import { formatPrice, getProductSpecs, getProducts, getRelated, type Product } from "@/data/products";
+import { formatPrice, getProduct, getProductSpecs, getProducts, getRelated } from "@/data/products";
 
-// Product detail pages are prerendered even though the site runs on a Node
-// service, so `getStaticPaths()` keeps enumerating every WordPress product at
-// build time. That is what feeds both the page data below and the sitemap.
-export const prerender = true;
+// Rendered on demand so a product added in WordPress is live immediately,
+// without a rebuild. The per-product fetch is a single request; the catalogue
+// behind `related` is shared through the in-process cache.
+const { slug } = Astro.params;
 
-export async function getStaticPaths() {
-  const products = await getProducts();
-  return products.map((product) => ({
-    params: { slug: product.slug },
-    props: { product, related: getRelated(products, product.slug) },
-  }));
+const product = slug ? await getProduct(slug) : undefined;
+
+// Astro.rewrite keeps the visitor on the product URL while rendering the 404
+// page, which is the documented pattern for a product that no longer exists.
+if (!product) {
+  return Astro.rewrite("/404");
 }
 
-interface Props {
-  product: Product;
-  related: Product[];
-}
-
-const { product, related } = Astro.props;
+const products = await getProducts();
+const related = getRelated(products, slug!);
 
 const origin = Astro.site ?? new URL(Astro.url.origin);
 // The canonical product lives in WordPress; this page is the headless
